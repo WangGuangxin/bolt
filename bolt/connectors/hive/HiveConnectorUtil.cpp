@@ -40,6 +40,7 @@
 #include "bolt/dwio/common/Reader.h"
 #include "bolt/expression/Expr.h"
 #include "bolt/expression/ExprToSubfieldFilter.h"
+#include "bolt/type/TimestampConversion.h"
 
 namespace bytedance::bolt::connector::hive {
 
@@ -566,11 +567,18 @@ void configureRowReaderOptions(
 
 namespace {
 bool applyPartitionFilter(
-    TypeKind kind,
+    const TypePtr& type,
     const std::string& partitionValue,
     common::Filter* filter) {
   try {
-    switch (kind) {
+    if (type->isDate()) {
+      const auto result = util::castFromDateString(
+          StringView(partitionValue), false /*isIso8601*/);
+      BOLT_CHECK(result.has_value());
+      return applyFilter(*filter, result.value());
+    }
+
+    switch (type->kind()) {
       case TypeKind::BIGINT:
       case TypeKind::INTEGER:
       case TypeKind::SMALLINT:
@@ -588,16 +596,16 @@ bool applyPartitionFilter(
         return applyFilter(*filter, partitionValue);
       }
       default:
-        BOLT_FAIL("Bad type {} for partition value: {}", kind, partitionValue);
+        BOLT_FAIL("Bad type {} for partition value: {}", type->kind(), partitionValue);
         break;
-    }
+    } 
   } catch (const std::exception& ex) {
-    BOLT_FAIL(
-        "applyPartitionFilter throw exception while convert partition value {} from string to {}, errmsg {}",
-        partitionValue,
-        kind,
-        ex.what());
-  }
+        BOLT_FAIL(
+          "applyPartitionFilter throw exception while convert partition value {} from string to {}, errmsg {}",
+          partitionValue,
+          type->kind(),
+          ex.what());
+    }
 }
 } // namespace
 
@@ -629,7 +637,7 @@ bool testFilters(
             }
           } else {
             if (!applyPartitionFilter(
-                    (*partitionKeysHandle)[name]->dataType()->kind(),
+                    (*partitionKeysHandle)[name]->dataType(),
                     iter->second.value(),
                     child->filter())) {
               return false;
