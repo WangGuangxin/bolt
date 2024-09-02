@@ -396,7 +396,7 @@ void SortBuffer::prepareOutput(uint32_t maxOutputRows) {
   BOLT_CHECK_GT(numInputRows_, numOutputRows_);
 
   const size_t batchSize =
-      std::min<size_t>(numInputRows_ - numOutputRows_, maxOutputRows);
+      std::min<uint64_t>(numInputRows_ - numOutputRows_, maxOutputRows);
 
   if (output_ != nullptr) {
     VectorPtr output = std::move(output_);
