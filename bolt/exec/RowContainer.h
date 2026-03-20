@@ -300,7 +300,7 @@ class RowContainer {
   /// Copies elements of 'rows' where the char* points to a row inside 'this' to
   /// 'result' and returns the number copied. 'result' should have space for
   /// 'rows.size()'.
-  int32_t findRows(folly::Range<char**> rows, char** result);
+  int32_t findRows(folly::Range<char**> rows, char** result) const;
   // Adds 'rows' to the free rows list and frees any associated
   // variable length data; but do not touch key columns.
   void eraseRowsSkippingKeys(folly::Range<char**> rows);
@@ -383,7 +383,7 @@ class RowContainer {
   /// columnar format.
   void extractSerializedRows(
       folly::Range<char**> rows,
-      const VectorPtr& result);
+      const VectorPtr& result) const;
 
   /// Copies serialized row produced by 'extractSerializedRow' into the
   /// container.
@@ -509,7 +509,7 @@ class RowContainer {
       int32_t numRows,
       bool setNullForNullKeysRow,
       bool setNullForNonProbedRow,
-      const VectorPtr& result);
+      const VectorPtr& result) const;
 
   static inline int32_t nullByte(int32_t nullOffset) {
     return nullOffset / 8;
@@ -534,7 +534,7 @@ class RowContainer {
       RowContainerIterator* FOLLY_NONNULL iter,
       int32_t maxRows,
       uint64_t maxBytes,
-      char* FOLLY_NONNULL* FOLLY_NONNULL rows) {
+      char* FOLLY_NONNULL* FOLLY_NONNULL rows) const {
     int32_t count = 0;
     uint64_t totalBytes = 0;
     auto numAllocations = rows_.numRanges();
@@ -602,14 +602,14 @@ class RowContainer {
       RowContainerIterator* FOLLY_NONNULL iter,
       int32_t maxRows,
       uint64_t maxBytes,
-      char* FOLLY_NONNULL* FOLLY_NONNULL rows) {
+      char* FOLLY_NONNULL* FOLLY_NONNULL rows) const {
     return listRows<ProbeType::kAll>(iter, maxRows, maxBytes, rows);
   }
 
   int32_t listRows(
       RowContainerIterator* FOLLY_NONNULL iter,
       int32_t maxRows,
-      char* FOLLY_NONNULL* FOLLY_NONNULL rows) {
+      char* FOLLY_NONNULL* FOLLY_NONNULL rows) const {
     return listRows<ProbeType::kAll>(iter, maxRows, kUnlimited, rows);
   }
 
@@ -637,7 +637,7 @@ class RowContainer {
       const char* FOLLY_NONNULL row,
       RowColumn column,
       const DecodedVector& decoded,
-      vector_size_t index);
+      vector_size_t index) const;
 
   /// Compares the value at 'column' in 'row' with the value at 'index' in
   /// 'decoded'. Returns 0 for equal, < 0 for 'row' < 'decoded', > 0 otherwise.
@@ -646,7 +646,7 @@ class RowContainer {
       RowColumn column,
       const DecodedVector& decoded,
       vector_size_t index,
-      CompareFlags flags = CompareFlags());
+      CompareFlags flags = CompareFlags()) const;
 
   /// Compares the value at 'columnIndex' between 'left' and 'right'. Returns
   /// 0 for equal, < 0 for left < right, > 0 otherwise.
@@ -654,7 +654,7 @@ class RowContainer {
       const char* FOLLY_NONNULL left,
       const char* FOLLY_NONNULL right,
       int32_t columnIndex,
-      CompareFlags flags = CompareFlags());
+      CompareFlags flags = CompareFlags()) const;
 
   /// Compares the value between 'left' at 'leftIndex' and 'right' and
   /// 'rightIndex'. Returns 0 for equal, < 0 for left < right, > 0 otherwise.
@@ -664,7 +664,7 @@ class RowContainer {
       const char* FOLLY_NONNULL right,
       int leftColumnIndex,
       int rightColumnIndex,
-      CompareFlags flags = CompareFlags());
+      CompareFlags flags = CompareFlags()) const;
 
   /// Allows get/set of the normalized key. If normalized keys are used, they
   /// are stored in the word immediately below the hash table row.
@@ -709,7 +709,7 @@ class RowContainer {
       int32_t columnIndex,
       folly::Range<char**> rows,
       bool mix,
-      uint64_t* FOLLY_NONNULL result);
+      uint64_t* FOLLY_NONNULL result) const;
 
   uint64_t allocatedBytes() const {
     return rows_.allocatedBytes() + stringAllocator_->retainedSize();
@@ -743,7 +743,7 @@ class RowContainer {
   int32_t compareRows(
       const char* FOLLY_NONNULL left,
       const char* FOLLY_NONNULL right,
-      const std::vector<CompareFlags>& flags = {}) {
+      const std::vector<CompareFlags>& flags = {}) const {
     BOLT_DCHECK(flags.empty() || flags.size() == keyTypes_.size());
     for (auto i = 0; i < keyTypes_.size(); ++i) {
       auto result =
@@ -807,7 +807,7 @@ class RowContainer {
 
   /// Checks that row and free row counts match and that free list membership is
   /// consistent with free flag.
-  void checkConsistency();
+  void checkConsistency() const;
 
   static FOLLY_ALWAYS_INLINE bool
   isNullAt(const char* FOLLY_NONNULL row, int32_t nullByte, uint8_t nullMask) {
@@ -834,11 +834,11 @@ class RowContainer {
       uint8_t partition,
       int32_t maxRows,
       const RowPartitions& rowPartitions,
-      char* FOLLY_NONNULL* FOLLY_NONNULL result);
+      char* FOLLY_NONNULL* FOLLY_NONNULL result) const;
 
   /// Advances 'iterator' by 'numRows'. The current row after skip is
   /// in iter.currentRow(). This is null if past end. Public for testing.
-  void skip(RowContainerIterator& iterator, int32_t numRows);
+  void skip(RowContainerIterator& iterator, int32_t numRows) const;
 
   bool testingMutable() const {
     return mutable_;
@@ -886,13 +886,13 @@ class RowContainer {
 
   /// Returns the size of a string or complex types value stored in the
   /// specified row and column.
-  int32_t variableSizeAt(const char* row, column_index_t column);
+  int32_t variableSizeAt(const char* row, column_index_t column) const;
 
   /// Copies a string or complex type value from the specified row and column
   /// @return The number of bytes written to 'destination' including the 4 bytes
   /// of the size.
   int32_t
-  extractVariableSizeAt(const char* row, column_index_t column, char* output);
+  extractVariableSizeAt(const char* row, column_index_t column, char* output) const;
 
   /// Copies a string or complex type value from 'data' into the specified row
   /// and column. Expects first 4 bytes in 'data' to contain the size of the
@@ -972,11 +972,11 @@ class RowContainer {
     }
   }
 
-  char* FOLLY_NULLABLE& nextFree(char* FOLLY_NONNULL row) {
+  char* FOLLY_NULLABLE& nextFree(char* FOLLY_NONNULL row) const {
     return *reinterpret_cast<char**>(row + kNextFreeOffset);
   }
 
-  uint32_t& variableRowSize(char* FOLLY_NONNULL row) {
+  uint32_t& variableRowSize(char* FOLLY_NONNULL row) const {
     DCHECK(rowSizeOffset_);
     return *reinterpret_cast<uint32_t*>(row + rowSizeOffset_);
   }
@@ -1119,7 +1119,7 @@ class RowContainer {
       bool nullable,
       folly::Range<char**> rows,
       bool mix,
-      uint64_t* FOLLY_NONNULL result);
+      uint64_t* FOLLY_NONNULL result) const;
 
   template <TypeKind Kind>
   FLATTEN inline bool equalsWithNulls(
@@ -1128,7 +1128,7 @@ class RowContainer {
       int32_t nullByte,
       uint8_t nullMask,
       const DecodedVector& decoded,
-      vector_size_t index) {
+      vector_size_t index) const {
     using T = typename KindToFlatVector<Kind>::HashRowType;
     bool rowIsNull = isNullAt(row, nullByte, nullMask);
     bool indexIsNull = decoded.isNullAt(index);
@@ -1154,7 +1154,7 @@ class RowContainer {
       const char* FOLLY_NONNULL row,
       int32_t offset,
       const DecodedVector& decoded,
-      vector_size_t index) {
+      vector_size_t index) const {
     using T = typename KindToFlatVector<Kind>::HashRowType;
 
     if constexpr (
@@ -1179,7 +1179,7 @@ class RowContainer {
       RowColumn column,
       const DecodedVector& decoded,
       vector_size_t index,
-      CompareFlags flags) {
+      CompareFlags flags) const {
     using T = typename KindToFlatVector<Kind>::HashRowType;
     bool rowIsNull = isNullAt(row, column.nullByte(), column.nullMask());
     bool indexIsNull = decoded.isNullAt(index);
@@ -1212,7 +1212,7 @@ class RowContainer {
       const Type* FOLLY_NONNULL type,
       RowColumn leftColumn,
       RowColumn rightColumn,
-      CompareFlags flags) {
+      CompareFlags flags) const {
     using T = typename KindToFlatVector<Kind>::HashRowType;
     bool leftIsNull =
         isNullAt(left, leftColumn.nullByte(), leftColumn.nullMask());
@@ -1252,7 +1252,7 @@ class RowContainer {
       const char* FOLLY_NONNULL right,
       const Type* FOLLY_NONNULL type,
       RowColumn column,
-      CompareFlags flags) {
+      CompareFlags flags) const {
     return compare<Kind>(left, right, type, column, column, flags);
   }
 
@@ -1327,14 +1327,14 @@ class RowContainer {
       int32_t offset,
       const DecodedVector& decoded,
       vector_size_t index,
-      CompareFlags flags = CompareFlags());
+      CompareFlags flags = CompareFlags()) const;
 
   int32_t compareComplexType(
       const char* FOLLY_NONNULL left,
       const char* FOLLY_NONNULL right,
       const Type* FOLLY_NONNULL type,
       int32_t offset,
-      CompareFlags flags);
+      CompareFlags flags) const;
 
   int32_t compareComplexType(
       const char* FOLLY_NONNULL left,
@@ -1342,7 +1342,7 @@ class RowContainer {
       const Type* FOLLY_NONNULL type,
       int32_t leftOffset,
       int32_t rightOffset,
-      CompareFlags flags = CompareFlags());
+      CompareFlags flags = CompareFlags()) const;
 
   // Free variable-width fields at column `column_index` associated with the
   // 'rows', and if 'checkFree_' is true, zero out complex-typed field in
@@ -1631,7 +1631,7 @@ FLATTEN inline bool RowContainer::equals(
     const char* FOLLY_NONNULL row,
     RowColumn column,
     const DecodedVector& decoded,
-    vector_size_t index) {
+    vector_size_t index) const {
   auto typeKind = decoded.base()->typeKind();
   if (UNLIKELY(typeKind == TypeKind::UNKNOWN)) {
     return isNullAt(row, column.nullByte(), column.nullMask());
@@ -1659,7 +1659,7 @@ inline int RowContainer::compare<TypeKind::OPAQUE>(
     RowColumn /*column*/,
     const DecodedVector& /*decoded*/,
     vector_size_t /*index*/,
-    CompareFlags /*flags*/) {
+    CompareFlags /*flags*/) const {
   BOLT_UNSUPPORTED("Comparing Opaque types is not supported.");
 }
 
@@ -1670,7 +1670,7 @@ inline int RowContainer::compare<TypeKind::OPAQUE>(
     const Type* FOLLY_NONNULL /*type*/,
     RowColumn /*leftColumn*/,
     RowColumn /*rightColumn*/,
-    CompareFlags /*flags*/) {
+    CompareFlags /*flags*/) const {
   BOLT_UNSUPPORTED("Comparing Opaque types is not supported.");
 }
 
@@ -1679,7 +1679,7 @@ inline int RowContainer::compare(
     RowColumn column,
     const DecodedVector& decoded,
     vector_size_t index,
-    CompareFlags flags) {
+    CompareFlags flags) const {
   return BOLT_DYNAMIC_TYPE_DISPATCH_ALL(
       compare, decoded.base()->typeKind(), row, column, decoded, index, flags);
 }
@@ -1688,7 +1688,7 @@ inline int RowContainer::compare(
     const char* FOLLY_NONNULL left,
     const char* FOLLY_NONNULL right,
     int columnIndex,
-    CompareFlags flags) {
+    CompareFlags flags) const {
   auto type = types_[columnIndex].get();
   return BOLT_DYNAMIC_TYPE_DISPATCH_ALL(
       compare, type->kind(), left, right, type, columnAt(columnIndex), flags);
@@ -1699,7 +1699,7 @@ inline int RowContainer::compare(
     const char* FOLLY_NONNULL right,
     int leftColumnIndex,
     int rightColumnIndex,
-    CompareFlags flags) {
+    CompareFlags flags) const {
   auto leftType = types_[leftColumnIndex].get();
   auto rightType = types_[rightColumnIndex].get();
   BOLT_CHECK(leftType->equivalent(*rightType));

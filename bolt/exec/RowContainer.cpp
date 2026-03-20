@@ -393,7 +393,7 @@ void RowContainer::eraseRows(folly::Range<char**> rows) {
   numFreeRows_ += rows.size();
 }
 
-int32_t RowContainer::findRows(folly::Range<char**> rows, char** result) {
+int32_t RowContainer::findRows(folly::Range<char**> rows, char** result) const {
   raw_vector<folly::Range<char*>> ranges;
   ranges.resize(rows_.numRanges());
   for (auto i = 0; i < rows_.numRanges(); ++i) {
@@ -492,7 +492,7 @@ void RowContainer::freeVariableWidthFields(folly::Range<char**> rows) {
   }
 }
 
-void RowContainer::checkConsistency() {
+void RowContainer::checkConsistency() const {
   constexpr int32_t kBatch = 1000;
   std::vector<char*> rows(kBatch);
 
@@ -567,7 +567,7 @@ std::unique_ptr<ByteInputStream> RowContainer::prepareRead(
       HashStringAllocator::headerOf(view->data()));
 }
 
-int32_t RowContainer::variableSizeAt(const char* row, column_index_t column) {
+int32_t RowContainer::variableSizeAt(const char* row, column_index_t column) const {
   const auto rowColumn = rowColumns_[column];
 
   if (isNullAt(row, rowColumn)) {
@@ -587,7 +587,7 @@ int32_t RowContainer::variableSizeAt(const char* row, column_index_t column) {
 int32_t RowContainer::extractVariableSizeAt(
     const char* row,
     column_index_t column,
-    char* output) {
+    char* output) const {
   const auto rowColumn = rowColumns_[column];
 
   // 4 bytes for size + N bytes for data.
@@ -680,7 +680,7 @@ void RowContainer::store(const RowVectorPtr& input) {
 
 void RowContainer::extractSerializedRows(
     folly::Range<char**> rows,
-    const VectorPtr& result) {
+    const VectorPtr& result) const {
   // The format of the extracted row is: null bytes followed by keys and
   // dependent columns. Fixed-width columns are serialized into fixed number of
   // bytes (see typeKindSize). Variable-width columns are serialized as 4 bytes
@@ -902,7 +902,7 @@ int RowContainer::compareComplexType(
     int32_t offset,
     const DecodedVector& decoded,
     vector_size_t index,
-    CompareFlags flags) {
+    CompareFlags flags) const {
   BOLT_DCHECK(flags.nullAsValue(), "not supported null handling mode");
 
   auto stream = prepareRead(row, offset);
@@ -956,7 +956,7 @@ int32_t RowContainer::compareComplexType(
     const Type* type,
     int32_t leftOffset,
     int32_t rightOffset,
-    CompareFlags flags) {
+    CompareFlags flags) const {
   BOLT_DCHECK(flags.nullAsValue(), "not supported null handling mode");
 
   auto leftStream = prepareRead(left, leftOffset);
@@ -969,7 +969,7 @@ int32_t RowContainer::compareComplexType(
     const char* right,
     const Type* type,
     int32_t offset,
-    CompareFlags flags) {
+    CompareFlags flags) const {
   return compareComplexType(left, right, type, offset, offset, flags);
 }
 
@@ -980,7 +980,7 @@ void RowContainer::hashTyped(
     bool nullable,
     folly::Range<char**> rows,
     bool mix,
-    uint64_t* result) {
+    uint64_t* result) const {
   using T = typename KindToFlatVector<Kind>::HashRowType;
 
   auto offset = column.offset();
@@ -1014,7 +1014,7 @@ void RowContainer::hash(
     int32_t column,
     folly::Range<char**> rows,
     bool mix,
-    uint64_t* result) {
+    uint64_t* result) const {
   if (typeKinds_[column] == TypeKind::UNKNOWN) {
     for (auto i = 0; i < rows.size(); ++i) {
       result[i] = mix ? bits::hashMix(result[i], BaseVector::kNullHash)
@@ -1079,7 +1079,7 @@ void RowContainer::extractProbedFlags(
     int32_t numRows,
     bool setNullForNullKeysRow,
     bool setNullForNonProbedRow,
-    const VectorPtr& result) {
+    const VectorPtr& result) const {
   result->resize(numRows);
   result->clearAllNulls();
   auto flatResult = result->as<FlatVector<bool>>();
@@ -1135,7 +1135,7 @@ int64_t RowContainer::sizeIncrement(
       bits::roundUp(needBytes, kAllocUnit);
 }
 
-void RowContainer::skip(RowContainerIterator& iter, int32_t numRows) {
+void RowContainer::skip(RowContainerIterator& iter, int32_t numRows) const {
   BOLT_DCHECK(accumulators_.empty(), "Used in join only");
   BOLT_DCHECK_LE(0, numRows);
   if (!iter.endOfRun) {
@@ -1193,7 +1193,7 @@ int32_t RowContainer::listPartitionRows(
     uint8_t partition,
     int32_t maxRows,
     const RowPartitions& rowPartitions,
-    char** result) {
+    char** result) const {
   BOLT_CHECK(
       !mutable_, "Can't list partition rows from a mutable row container");
   BOLT_CHECK_EQ(
