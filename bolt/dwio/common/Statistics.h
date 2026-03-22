@@ -569,6 +569,9 @@ struct ColumnReaderStatistics {
   // Number of rows returned by string dictionary reader that is flattened
   // instead of keeping dictionary encoding.
   int64_t flattenStringDictionaryValues{0};
+
+  // Total time spent in loading pages, in nanoseconds.
+  uint64_t pageLoadTimeNs{0};
 };
 
 struct RuntimeStatistics {
@@ -607,10 +610,12 @@ struct RuntimeStatistics {
     decodeTimeNs += other.decodeTimeNs;
     columnReaderStatistics.flattenStringDictionaryValues =
         other.columnReaderStatistics.flattenStringDictionaryValues;
+    columnReaderStatistics.pageLoadTimeNs +=
+        other.columnReaderStatistics.pageLoadTimeNs;
   }
 
   std::unordered_map<std::string, RuntimeCounter> toMap() {
-    return {
+    std::unordered_map<std::string, RuntimeCounter> result = {
         {"skippedSplits", RuntimeCounter(skippedSplits)},
         {"skippedSplitBytes",
          RuntimeCounter(skippedSplitBytes, RuntimeCounter::Unit::kBytes)},
@@ -623,6 +628,12 @@ struct RuntimeStatistics {
          RuntimeCounter(columnReaderStatistics.flattenStringDictionaryValues)},
         {"processedStrides", RuntimeCounter(processedStrides)},
         {"processedSplits", RuntimeCounter(processedSplits)}};
+    if (columnReaderStatistics.pageLoadTimeNs > 0) {
+      result.emplace(
+          "pageLoadTimeNs",
+          RuntimeCounter(columnReaderStatistics.pageLoadTimeNs, RuntimeCounter::Unit::kNanos));
+    }
+    return result;
   }
 };
 

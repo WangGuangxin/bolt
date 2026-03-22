@@ -37,6 +37,7 @@
 #include "bolt/dwio/common/ColumnVisitors.h"
 #include "bolt/dwio/parquet/reader/Decompression.h"
 #include "bolt/dwio/parquet/reader/NestedStructureDecoder.h"
+#include "bolt/common/time/Timer.h"
 #include "bolt/dwio/parquet/reader/PageReader.h"
 #include "bolt/dwio/parquet/thrift/FmtParquetFormatters.h"
 #include "bolt/dwio/parquet/thrift/ThriftTransport.h"
@@ -103,7 +104,14 @@ PageHeader PageReader::readPageHeader() {
   if (bufferEnd_ == bufferStart_) {
     const void* buffer;
     int32_t size;
-    inputStream_->Next(&buffer, &size);
+    uint64_t readUs{0};
+    {
+      MicrosecondTimer timer(&readUs);
+      inputStream_->Next(&buffer, &size);
+    }
+    if (statis_) {
+      statis_->columnReaderStatistics.pageLoadTimeNs += readUs * 1'000;
+    }
     bufferStart_ = reinterpret_cast<const char*>(buffer);
     bufferEnd_ = bufferStart_ + size;
   }
@@ -188,26 +196,33 @@ PageHeader PageReader::readPageHeader() {
 }
 
 const char* PageReader::readBytes(int32_t size, BufferPtr& copy) {
-  if (bufferEnd_ == bufferStart_) {
-    const void* buffer = nullptr;
-    int32_t bufferSize = 0;
-    if (!inputStream_->Next(&buffer, &bufferSize)) {
-      BOLT_FAIL("Read past end");
+  uint64_t readUs{0};
+  {
+    MicrosecondTimer timer(&readUs);
+    if (bufferEnd_ == bufferStart_) {
+      const void* buffer = nullptr;
+      int32_t bufferSize = 0;
+      if (!inputStream_->Next(&buffer, &bufferSize)) {
+        BOLT_FAIL("Read past end");
+      }
+      bufferStart_ = reinterpret_cast<const char*>(buffer);
+      bufferEnd_ = bufferStart_ + bufferSize;
     }
-    bufferStart_ = reinterpret_cast<const char*>(buffer);
-    bufferEnd_ = bufferStart_ + bufferSize;
+    if (bufferEnd_ - bufferStart_ >= size) {
+      bufferStart_ += size;
+      return bufferStart_ - size;
+    }
+    dwio::common::ensureCapacity<char>(copy, size, &pool_);
+    dwio::common::readBytes(
+        size,
+        inputStream_.get(),
+        copy->asMutable<char>(),
+        bufferStart_,
+        bufferEnd_);
   }
-  if (bufferEnd_ - bufferStart_ >= size) {
-    bufferStart_ += size;
-    return bufferStart_ - size;
+  if (statis_) {
+    statis_->columnReaderStatistics.pageLoadTimeNs += readUs * 1'000;
   }
-  dwio::common::ensureCapacity<char>(copy, size, &pool_);
-  dwio::common::readBytes(
-      size,
-      inputStream_.get(),
-      copy->asMutable<char>(),
-      bufferStart_,
-      bufferEnd_);
   return copy->as<char>();
 }
 
@@ -545,12 +560,19 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       if (pageData_) {
         memcpy(dictionary_.values->asMutable<char>(), pageData_, numBytes);
       } else {
-        dwio::common::readBytes(
-            numBytes,
-            inputStream_.get(),
-            dictionary_.values->asMutable<char>(),
-            bufferStart_,
-            bufferEnd_);
+        uint64_t readUs{0};
+        {
+          MicrosecondTimer timer(&readUs);
+          dwio::common::readBytes(
+              numBytes,
+              inputStream_.get(),
+              dictionary_.values->asMutable<char>(),
+              bufferStart_,
+              bufferEnd_);
+        }
+        if (statis_) {
+          statis_->columnReaderStatistics.pageLoadTimeNs += readUs * 1'000;
+        }
       }
       if (type_->type()->isShortDecimal() &&
           parquetType == thrift::Type::INT32) {
@@ -580,12 +602,19 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       if (pageData_) {
         memcpy(dictionary_.values->asMutable<char>(), pageData_, numBytes);
       } else {
-        dwio::common::readBytes(
-            numBytes,
-            inputStream_.get(),
-            dictionary_.values->asMutable<char>(),
-            bufferStart_,
-            bufferEnd_);
+        uint64_t readUs{0};
+        {
+          MicrosecondTimer timer(&readUs);
+          dwio::common::readBytes(
+              numBytes,
+              inputStream_.get(),
+              dictionary_.values->asMutable<char>(),
+              bufferStart_,
+              bufferEnd_);
+        }
+        if (statis_) {
+          statis_->columnReaderStatistics.pageLoadTimeNs += readUs * 1'000;
+        }
       }
       // Expand the Parquet type length values to Bolt type length.
       // We start from the end to allow in-place expansion.
@@ -619,8 +648,15 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       if (pageData_) {
         memcpy(strings, pageData_, numBytes);
       } else {
-        dwio::common::readBytes(
-            numBytes, inputStream_.get(), strings, bufferStart_, bufferEnd_);
+        uint64_t readUs{0};
+        {
+          MicrosecondTimer timer(&readUs);
+          dwio::common::readBytes(
+              numBytes, inputStream_.get(), strings, bufferStart_, bufferEnd_);
+        }
+        if (statis_) {
+          statis_->columnReaderStatistics.pageLoadTimeNs += readUs * 1'000;
+        }
       }
       auto header = strings;
       for (auto i = 0; i < dictionary_.numValues; ++i) {
@@ -642,12 +678,19 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       if (pageData_) {
         memcpy(data, pageData_, numParquetBytes);
       } else {
-        dwio::common::readBytes(
-            numParquetBytes,
-            inputStream_.get(),
-            data,
-            bufferStart_,
-            bufferEnd_);
+        uint64_t readUs{0};
+        {
+          MicrosecondTimer timer(&readUs);
+          dwio::common::readBytes(
+              numParquetBytes,
+              inputStream_.get(),
+              data,
+              bufferStart_,
+              bufferEnd_);
+        }
+        if (statis_) {
+          statis_->columnReaderStatistics.pageLoadTimeNs += readUs * 1'000;
+        }
       }
       if (type_->type()->isShortDecimal()) {
         // Parquet decimal values have a fixed typeLength_ and are in big-endian
