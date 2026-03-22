@@ -231,6 +231,61 @@ TEST_P(CovarianceAggregationTest, constantY) {
   testDistinctGroupBy(aggName, data);
 }
 
+TEST_F(CovarianceAggregatesTest, covarSamp) {
+  auto agg = "covar_samp";
+  auto input = makeRowVector(
+      {makeFlatVector<double>({1, 2, 3}), makeFlatVector<double>({1, 2, 3})});
+  auto expected =
+      makeRowVector({makeFlatVector<double>(std::vector<double>{1.0})});
+  testCovarianceAggResult(agg, input, expected);
+
+  input = makeRowVector(
+      {makeFlatVector<double>({1, 3, 5}), makeFlatVector<double>({2, 4, 6})});
+  expected = makeRowVector({makeFlatVector<double>(std::vector<double>{4.0})});
+  testCovarianceAggResult(agg, input, expected);
+
+  // Output NULL when count equals 0.
+  input = makeRowVector(
+      {makeNullableFlatVector<double>(
+           std::vector<std::optional<double>>{std::nullopt}),
+       makeNullableFlatVector<double>(
+           std::vector<std::optional<double>>{std::nullopt})});
+  expected = makeRowVector({makeNullableFlatVector<double>(
+      std::vector<std::optional<double>>{std::nullopt})});
+  testCovarianceAggResult(agg, input, expected);
+
+  // Output NULL when count equals 1.
+  input = makeRowVector({makeFlatVector<double>(1), makeFlatVector<double>(1)});
+  expected = makeRowVector({makeNullableFlatVector<double>(
+      std::vector<std::optional<double>>{std::nullopt})});
+  testCovarianceAggResult(agg, input, expected);
+
+  // Output NULL when count equals 0 for legacy aggregate.
+  input = makeRowVector(
+      {makeNullableFlatVector<double>(
+           std::vector<std::optional<double>>{std::nullopt}),
+       makeNullableFlatVector<double>(
+           std::vector<std::optional<double>>{std::nullopt})});
+  expected = makeRowVector({makeNullableFlatVector<double>(
+      std::vector<std::optional<double>>{std::nullopt})});
+  testCovarianceAggResult(agg, input, expected, true);
+
+  // Output NaN when m2 equals 1 for legacy aggregate.
+  input = makeRowVector({makeFlatVector<double>(1), makeFlatVector<double>(1)});
+  expected = makeRowVector({makeFlatVector<double>(
+      std::vector<double>{std::numeric_limits<double>::quiet_NaN()})});
+  testCovarianceAggResult(agg, input, expected, true);
+
+  // Output NaN when c2 is ±inf.
+  input = makeRowVector(
+      {makeFlatVector<double>({22, std::numeric_limits<double>::infinity()}),
+       makeFlatVector<double>({0.688, 0.225})});
+  expected = makeRowVector({makeFlatVector<double>(
+      std::vector<double>{std::numeric_limits<double>::quiet_NaN()})});
+  testCovarianceAggResult(agg, input, expected);
+  testCovarianceAggResult(agg, input, expected, true);
+}
+
 BOLT_INSTANTIATE_TEST_SUITE_P(
     CovarianceAggregationTest,
     CovarianceAggregationTest,
