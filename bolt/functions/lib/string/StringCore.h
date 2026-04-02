@@ -1059,40 +1059,17 @@ FOLLY_ALWAYS_INLINE static std::string toLower(
   icu::UnicodeString unicodeStr =
       icu::UnicodeString::fromUTF8({str, static_cast<int32_t>(length)});
 
-  // Handle Greek final sigma if needed
-  if constexpr (greekFinalSigma) {
-    int32_t i = 0;
-    int32_t unicodeStrLength = unicodeStr.length();
-    while (i < unicodeStrLength) {
-      UChar32 ch;
-      U16_NEXT(unicodeStr.getBuffer(), i, unicodeStrLength, ch);
-      if (ch == 0x03A3) { // Greek capital letter Sigma
-        bool isFinal = true;
-        if (i < unicodeStrLength) {
-          UChar32 lookaheadCh;
-          int32_t lookaheadI = i;
-          U16_NEXT(
-              unicodeStr.getBuffer(),
-              lookaheadI,
-              unicodeStrLength,
-              lookaheadCh);
-          if (detail::isCased(lookaheadCh)) {
-            isFinal = false;
-          }
-        }
-        // Replace with final sigma or regular sigma
-        UChar32 lowerSigma = isFinal ? 0x03C2 : 0x03C3;
-        // Replace the character in the UnicodeString
-        unicodeStr.replace(i - 1, 1, lowerSigma);
-      }
-    }
-  }
+  // Rely on ICU's default conditional casing for Greek sigma.
+  // ICU implements Unicode SpecialCasing rules for final sigma, so we do not
+  // override it here. The previous manual implementation caused incorrect
+  // handling for single-letter words like "Σ".
 
-  // Handle Turkish casing if needed
+  // Handle Turkish-related expectations (Spark behavior): do NOT use Turkish
+  // locale-specific casing. Spark expects one-to-many mapping for 'İ' to
+  // "i\u0307" based on general Unicode SpecialCasing, so use root/default
+  // locale here.
   if constexpr (turkishCasing) {
-    // Use Turkish locale for Turkish-specific casing
-    icu::Locale turkishLocale("tr", "TR");
-    unicodeStr.toLower(turkishLocale);
+    unicodeStr.toLower(getDefaultLocale());
   } else {
     unicodeStr.toLower(locale);
   }
@@ -1165,11 +1142,10 @@ FOLLY_ALWAYS_INLINE static std::string toUpper(
   icu::UnicodeString unicodeStr =
       icu::UnicodeString::fromUTF8({str, static_cast<int32_t>(length)});
 
-  // Handle Turkish casing if needed
+  // Spark behavior: avoid Turkish locale-specific casing so that 'i\u0307'
+  // uppercases to 'I\u0307' (one-to-many) per Unicode SpecialCasing.
   if constexpr (turkishCasing) {
-    // Use Turkish locale for Turkish-specific casing
-    icu::Locale turkishLocale("tr", "TR");
-    unicodeStr.toUpper(turkishLocale);
+    unicodeStr.toUpper(getDefaultLocale());
   } else {
     unicodeStr.toUpper(locale);
   }
@@ -1354,5 +1330,6 @@ utf8proc_codepoint_length(utf8proc_int32_t uc) {
     return 0;
   }
 }
+
 } // namespace stringCore
 } // namespace bytedance::bolt::functions
